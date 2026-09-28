@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jurnal Guru Terpadu (Firebase)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- FIREBASE SDK (Versi 8 untuk kompatibilitas fungsi global) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .section-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .section-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Toast Animation */
+        #toast-container { transition: all 0.3s ease; }
+        .toast-enter { opacity: 0; transform: translateY(100%); }
+        .toast-enter-active { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="bg-primary-900 text-white w-64 flex-shrink-0 flex flex-col transition-transform duration-300 absolute z-30 h-full md:relative md:translate-x-0 -translate-x-full shadow-xl">
+        <div class="h-16 flex items-center px-6 border-b border-primary-700 bg-primary-900">
+            <i class="fas fa-book-open text-2xl text-primary-100 mr-3"></i>
+            <span class="text-xl font-bold tracking-wide">Jurnal Guru</span>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1">
+                <li><a href="#" onclick="switchMenu('dashboard', this)" class="nav-menu active flex items-center px-6 py-3 bg-primary-700 border-l-4 border-primary-100 hover:bg-primary-700 transition-colors"><i class="fas fa-home w-6 mr-2"></i> Dashboard</a></li>
+                <li><a href="#" onclick="switchMenu('biodata', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-id-card w-6 mr-2"></i> Biodata Guru</a></li>
+                <li><a href="#" onclick="switchMenu('siswa', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-users w-6 mr-2"></i> Data Siswa</a></li>
+                <li><a href="#" onclick="switchMenu('absensi', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-clipboard-user w-6 mr-2"></i> Absensi</a></li>
+                <li><a href="#" onclick="switchMenu('rpph', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-file-alt w-6 mr-2"></i> RPPH</a></li>
+                <li><a href="#" onclick="switchMenu('nilai', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-star w-6 mr-2"></i> Nilai Siswa</a></li>
+                <li><a href="#" onclick="switchMenu('kalender', this)" class="nav-menu flex items-center px-6 py-3 border-l-4 border-transparent hover:bg-primary-700 transition-colors text-primary-100 hover:text-white"><i class="fas fa-calendar-alt w-6 mr-2"></i> Kalender</a></li>
+            </ul>
+        </nav>
+        
+        <div class="p-4 border-t border-primary-700 bg-primary-900 text-sm text-center text-primary-200">
+            &copy; 2026 Jurnal Guru Terpadu
+        </div>
+    </aside>
+
+    <!-- Konten Utama -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden w-full relative">
+        <!-- Header -->
+        <header class="h-16 bg-white shadow-sm flex items-center justify-between px-4 sm:px-6 lg:px-8 z-10">
+            <div class="flex items-center">
+                <button id="mobile-menu-btn" class="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none" onclick="toggleMobileMenu()"><i class="fas fa-bars text-xl"></i></button>
+                <h2 id="page-title" class="ml-4 md:ml-0 text-xl font-semibold text-gray-800">Dashboard</h2>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span id="current-datetime" class="hidden sm:block text-sm text-gray-500 font-medium"></span>
+                <div class="h-8 w-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold border border-primary-300">G</div>
+            </div>
+        </header>
+
+        <!-- Area Halaman Dinamis -->
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
+            
+            <!-- DASHBOARD -->
+            <div id="dashboard" class="section-content active">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">Selamat Datang, <span id="dash-guru-nama" class="text-primary-600">Guru</span>!</h3>
+                    <p class="text-gray-600">Ini adalah ringkasan jurnal kelas Anda hari ini.</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex items-center">
+                        <div class="p-4 rounded-full bg-blue-100 text-primary-600 mr-4"><i class="fas fa-users text-2xl"></i></div>
+                        <div><p class="text-sm text-gray-500">Total Siswa</p><p class="text-2xl font-bold" id="dash-total-siswa">0</p></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex items-center">
+                        <div class="p-4 rounded-full bg-green-100 text-green-600 mr-4"><i class="fas fa-user-check text-2xl"></i></div>
+                        <div><p class="text-sm text-gray-500">Hadir Hari Ini</p><p class="text-2xl font-bold" id="dash-hadir">-</p></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex items-center">
+                        <div class="p-4 rounded-full bg-yellow-100 text-yellow-600 mr-4"><i class="fas fa-file-alt text-2xl"></i></div>
+                        <div><p class="text-sm text-gray-500">RPPH Dibuat</p><p class="text-2xl font-bold" id="dash-rpph">0</p></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex items-center">
+                        <div class="p-4 rounded-full bg-purple-100 text-purple-600 mr-4"><i class="fas fa-star text-2xl"></i></div>
+                        <div><p class="text-sm text-gray-500">Rata-rata Nilai</p><p class="text-2xl font-bold" id="dash-nilai">-</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BIODATA GURU -->
+            <div id="biodata" class="section-content">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="bg-primary-600 p-6 text-white flex justify-between items-center">
+                        <div>
+                            <h3 class="text-xl font-bold">Profil Guru</h3>
+                            <p class="text-primary-100 text-sm">Kelola informasi pribadi dan data kepegawaian Anda</p>
+                        </div>
+                        <button onclick="toggleEditBiodata()" id="btn-edit-bio" class="bg-white text-primary-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition shadow-sm"><i class="fas fa-edit mr-2"></i>Edit Profil</button>
+                    </div>
+                    <div class="p-6">
+                        <form id="form-biodata" onsubmit="saveBiodata(event)">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap & Gelar</label>
+                                    <input type="text" id="bio-nama" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">NIP / NUPTK</label>
+                                    <input type="text" id="bio-nip" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Tempat, Tanggal Lahir</label>
+                                    <input type="text" id="bio-ttl" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mata Pelajaran / Guru Kelas</label>
+                                    <input type="text" id="bio-mapel" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Pendidikan Terakhir</label>
+                                    <input type="text" id="bio-pendidikan" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Nomor HP/WA</label>
+                                    <input type="text" id="bio-hp" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Alamat Lengkap</label>
+                                    <textarea id="bio-alamat" rows="3" class="w-full border-gray-300 rounded-lg bg-gray-50 p-2.5 border" disabled></textarea>
+                                </div>
+                            </div>
+                            <div class="mt-6 flex justify-end hidden" id="action-bio">
+                                <button type="button" onclick="cancelEditBiodata()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg mr-3 hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700">Simpan Perubahan</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DATA SISWA -->
+            <div id="siswa" class="section-content">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div class="relative w-full sm:w-64">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                            <input type="text" id="search-siswa" onkeyup="renderSiswa()" placeholder="Cari NIS / Nama..." class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 outline-none">
+                        </div>
+                        <button onclick="openModalSiswa()" class="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 w-full sm:w-auto shadow-sm"><i class="fas fa-plus mr-2"></i> Tambah Siswa</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full whitespace-nowrap text-left text-sm">
+                            <thead class="bg-gray-50 text-gray-600 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-6 py-4 font-semibold">No</th>
+                                    <th class="px-6 py-4 font-semibold">NIS / NISN</th>
+                                    <th class="px-6 py-4 font-semibold">Nama Lengkap</th>
+                                    <th class="px-6 py-4 font-semibold">L/P</th>
+                                    <th class="px-6 py-4 font-semibold text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-siswa" class="divide-y divide-gray-100 text-gray-700">
+                                <!-- Data render by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABSENSI -->
+            <div id="absensi" class="section-content">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <label class="font-medium text-gray-700">Tanggal:</label>
+                            <input type="date" id="tgl-absensi" class="border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-primary-500" onchange="renderAbsensi()">
+                        </div>
+                        <button onclick="simpanAbsensi()" class="bg-primary-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-primary-700 shadow-sm"><i class="fas fa-save mr-2"></i> Simpan Absensi</button>
+                    </div>
+                    <div class="overflow-x-auto p-0">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-primary-50 text-primary-800">
+                                <tr>
+                                    <th class="px-6 py-3 border-b border-primary-100">Nama Siswa</th>
+                                    <th class="px-2 py-3 border-b border-primary-100 text-center w-20">Hadir</th>
+                                    <th class="px-2 py-3 border-b border-primary-100 text-center w-20">Sakit</th>
+                                    <th class="px-2 py-3 border-b border-primary-100 text-center w-20">Izin</th>
+                                    <th class="px-2 py-3 border-b border-primary-100 text-center w-20">Alpa</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-absensi" class="divide-y divide-gray-200">
+                                <!-- Data render by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RPPH (Rencana Pelaksanaan Pembelajaran Harian) -->
+            <div id="rpph" class="section-content">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-0">
+                            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Buat RPPH Baru</h3>
+                            <form id="form-rpph" onsubmit="simpanRPPH(event)" class="space-y-4 text-sm">
+                                <input type="hidden" id="rpph-id">
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">Tanggal Pelaksanaan</label>
+                                    <input type="date" id="rpph-tgl" required class="w-full border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">Tema / Mata Pelajaran</label>
+                                    <input type="text" id="rpph-tema" required placeholder="Contoh: Tema 1 / Matematika" class="w-full border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">Tujuan Pembelajaran</label>
+                                    <textarea id="rpph-tujuan" rows="2" required class="w-full border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary-500 outline-none"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">Kegiatan Inti</label>
+                                    <textarea id="rpph-kegiatan" rows="3" required class="w-full border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary-500 outline-none"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block font-medium text-gray-700 mb-1">Penilaian</label>
+                                    <input type="text" id="rpph-penilaian" required placeholder="Contoh: Tes Tulis, Observasi" class="w-full border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary-500 outline-none">
+                                </div>
+                                <button type="submit" class="w-full bg-primary-600 text-white py-2 rounded-lg font-medium hover:bg-primary-700">Simpan RPPH</button>
+                                <button type="button" onclick="resetFormRPPH()" class="w-full mt-2 bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200">Reset Form</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Arsip RPPH</h3>
+                            <div id="list-rpph" class="space-y-4">
+                                <!-- Data render by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NILAI SISWA -->
+            <div id="nilai" class="section-content">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800">Daftar Nilai Siswa</h3>
+			            <button onclick="downloadExcel()" class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 shadow-sm"><i class="fas fa-file-excel mr-2"></i> Download Excel</button>
+                        <button onclick="simpanNilai()" class="bg-primary-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-primary-700 shadow-sm"><i class="fas fa-save mr-2"></i> Simpan Nilai</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full whitespace-nowrap text-left text-sm">
+                            <thead class="bg-primary-50 text-primary-800 border-b border-primary-100">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold">Nama Siswa</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">UH 1</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">UH 2</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">UTS</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">UAS</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">Rata-rata</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-nilai" class="divide-y divide-gray-100">
+                                <!-- Data render by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TABEL REKAP TUGAS -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+                    <div class="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800">Daftar Rekap Tugas</h3>
+                        <div class="flex space-x-2">
+                            <button onclick="downloadExcelTugas()" class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 shadow-sm"><i class="fas fa-file-excel mr-2"></i> Download Excel</button>
+                            <button onclick="simpanTugas()" class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 shadow-sm"><i class="fas fa-save mr-2"></i> Simpan Tugas</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full whitespace-nowrap text-left text-sm">
+                            <thead class="bg-blue-50 text-blue-800 border-b border-blue-100">
+                                <tr>
+                                    <th class="px-4 py-3 font-semibold">Nama Siswa</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">Tugas 1</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">Tugas 2</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">Tugas 3</th>
+                                    <th class="px-4 py-3 font-semibold text-center w-24">Rata-rata</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-tugas" class="divide-y divide-gray-100">
+                                <!-- Data render by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KALENDER AKADEMIK -->
+            <div id="kalender" class="section-content">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold text-gray-800" id="cal-month-year">Bulan Tahun</h3>
+                            <div class="space-x-2">
+                                <button onclick="changeMonth(-1)" class="p-2 border rounded hover:bg-gray-50"><i class="fas fa-chevron-left"></i></button>
+                                <button onclick="changeMonth(1)" class="p-2 border rounded hover:bg-gray-50"><i class="fas fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-7 gap-1 text-center font-semibold text-sm text-gray-600 mb-2">
+                            <div>Min</div><div>Sen</div><div>Sel</div><div>Rab</div><div>Kam</div><div>Jum</div><div>Sab</div>
+                        </div>
+                        <div id="cal-grid" class="grid grid-cols-7 gap-1 text-center">
+                            <!-- Calendar JS -->
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Agenda Akademik</h3>
+                        <div class="space-y-3" id="cal-events">
+                            <!-- Events JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Modal Tambah/Edit Siswa -->
+    <div id="modal-siswa" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 m-4 transform transition-all scale-95 opacity-0" id="modal-siswa-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold" id="modal-siswa-title">Tambah Siswa</h3>
+                <button onclick="closeModalSiswa()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="form-siswa" onsubmit="simpanSiswa(event)" class="space-y-4">
+                <input type="hidden" id="form-siswa-id">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">NIS / NISN</label>
+                    <input type="text" id="form-siswa-nis" required class="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                    <input type="text" id="form-siswa-nama" required class="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                    <select id="form-siswa-jk" class="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500">
+                        <option value="L">Laki-laki (L)</option>
+                        <option value="P">Perempuan (P)</option>
+                    </select>
+                </div>
+                <div class="flex justify-end mt-6 space-x-3">
+                    <button type="button" onclick="closeModalSiswa()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+    <div id="mobile-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden" onclick="toggleMobileMenu()"></div>
+
+    <script>
+        // ==========================================
+        // 1. KONFIGURASI FIREBASE ANDA (GANTI INI)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwABQEQP0NNcV2qDBw36keI_R-i7L9ATY",
+            authDomain: "jurnalguru-5831b.firebaseapp.com",
+            databaseURL: "https://jurnalguru-5831b-default-rtdb.firebaseio.com", // PASTIKAN URL INI ADA!
+            projectId: "jurnalguru-5831b",
+            storageBucket: "jurnalguru-5831b.firebasestorage.app",
+            messagingSenderId: "335086136758",
+            appId: "1:335086136758:web:65410cec8d15944a7f6517"
+        };
+
+        // Inisialisasi Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const database = firebase.database();
+
+        // ==========================================
+        // 2. STATE DATA LOKAL (KOSONG DI AWAL)
+        // ==========================================
+        let db = {
+            biodata: { nama: '', nip: '', ttl: '', mapel: '', pendidikan: '', hp: '', alamat: '' },
+            siswa: [],
+            absensi: {},
+            rpph: [],
+            nilai: {},
+            tugas: {},
+            kalenderEvents: []
+        };
+
+        // ==========================================
+        // 3. INISIALISASI & REALTIME LISTENER
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            
+            // Set input date ke hari ini
+            document.getElementById('tgl-absensi').valueAsDate = new Date();
+            
+            // Listener Realtime dari Firebase
+            // Setiap ada perubahan (tambah/edit/hapus), UI otomatis akan render ulang
+            database.ref('/').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    db.biodata = data.biodata || { nama: 'Guru', nip: '', ttl: '', mapel: '', pendidikan: '', hp: '', alamat: '' };
+                    db.siswa = data.siswa ? Object.values(data.siswa) : [];
+                    db.absensi = data.absensi || {};
+                    db.rpph = data.rpph ? Object.values(data.rpph) : [];
+                    db.nilai = data.nilai || {};
+                    db.tugas = data.tugas || {};
+                    db.kalenderEvents = data.kalenderEvents ? Object.values(data.kalenderEvents) : [];
+                } else {
+                    // Jika database benar-benar kosong
+                    db.biodata.nama = "Guru Baru"; 
+                }
+                renderAll();
+            });
+        });
+
+        function renderAll() {
+            renderDashboard();
+            renderBiodata();
+            renderSiswa();
+            renderAbsensi();
+            renderRPPH();
+            renderNilai();
+            renderTugas();
+            renderKalender();
+        }
+
+        // ==========================================
+        // UTILITIES & NAVIGATION
+        // ==========================================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bg = type === 'success' ? 'bg-green-600' : (type === 'error' ? 'bg-red-600' : 'bg-blue-600');
+            let icon = type === 'success' ? 'fa-check-circle' : (type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle');
+
+            toast.className = `${bg} text-white px-4 py-3 rounded-lg shadow-lg flex items-center text-sm font-medium toast-enter transition-all duration-300`;
+            toast.innerHTML = `<i class="fas ${icon} mr-3 text-lg"></i> ${message}`;
+            container.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('toast-enter-active'), 10);
+            setTimeout(() => {
+                toast.classList.remove('toast-enter-active');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' };
+            document.getElementById('current-datetime').textContent = now.toLocaleDateString('id-ID', options);
+        }
+
+        function switchMenu(pageId, element) {
+            document.querySelectorAll('.section-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            
+            document.querySelectorAll('.nav-menu').forEach(el => {
+                el.classList.remove('active', 'bg-primary-700', 'border-primary-100');
+                el.classList.add('border-transparent', 'text-primary-100');
+                el.classList.remove('text-white');
+            });
+            
+            if(element) {
+                element.classList.remove('border-transparent', 'text-primary-100');
+                element.classList.add('active', 'bg-primary-700', 'border-primary-100', 'text-white');
+            }
+            
+            const titles = { 'dashboard':'Dashboard', 'biodata':'Biodata Guru', 'siswa':'Data Siswa', 'absensi':'Kehadiran Siswa', 'rpph':'Rencana Pembelajaran', 'nilai':'Rekap Nilai', 'kalender':'Kalender Akademik'};
+            document.getElementById('page-title').textContent = titles[pageId] || 'Dashboard';
+            if(window.innerWidth < 768) toggleMobileMenu();
+        }
+
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            if(sidebar.classList.contains('-translate-x-full')) {
+                overlay.classList.add('hidden');
+            } else {
+                overlay.classList.remove('hidden');
+            }
+        }
+
+        // ==========================================
+        // DASHBOARD MODULE
+        // ==========================================
+        function renderDashboard() {
+            document.getElementById('dash-guru-nama').textContent = (db.biodata.nama || "Guru").split(',')[0];
+            document.getElementById('dash-total-siswa').textContent = db.siswa.length;
+            document.getElementById('dash-rpph').textContent = db.rpph.length;
+            
+            let total = 0, count = 0;
+            for(let id in db.nilai) {
+                let n = db.nilai[id];
+                let rt = (Number(n.uh1||0) + Number(n.uh2||0) + Number(n.uts||0) + Number(n.uas||0))/4;
+                total += rt; count++;
+            }
+            document.getElementById('dash-nilai').textContent = count > 0 ? (total/count).toFixed(1) : '-';
+
+            let today = new Date().toISOString().split('T')[0];
+            let hadir = 0;
+            if(db.absensi[today]) {
+                for(let id in db.absensi[today]) {
+                    if(db.absensi[today][id] === 'H') hadir++;
+                }
+                document.getElementById('dash-hadir').textContent = hadir;
+            } else {
+                document.getElementById('dash-hadir').textContent = '-';
+            }
+        }
+
+        // ==========================================
+        // BIODATA MODULE (FIREBASE WRITES)
+        // ==========================================
+        function renderBiodata() {
+            ['nama', 'nip', 'ttl', 'mapel', 'pendidikan', 'hp', 'alamat'].forEach(field => {
+                document.getElementById(`bio-${field}`).value = db.biodata[field] || '';
+            });
+        }
+
+        function toggleEditBiodata() {
+            const isEditing = !document.getElementById('bio-nama').disabled;
+            if(isEditing) return;
+            
+            document.querySelectorAll('#form-biodata input, #form-biodata textarea').forEach(el => {
+                el.disabled = false;
+                el.classList.remove('bg-gray-50');
+                el.classList.add('bg-white', 'border-primary-300', 'focus:ring-1', 'focus:ring-primary-500', 'outline-none');
+            });
+            document.getElementById('action-bio').classList.remove('hidden');
+            document.getElementById('btn-edit-bio').classList.add('hidden');
+        }
+
+        function cancelEditBiodata() {
+            renderBiodata(); 
+            document.querySelectorAll('#form-biodata input, #form-biodata textarea').forEach(el => {
+                el.disabled = true;
+                el.classList.add('bg-gray-50');
+                el.classList.remove('bg-white', 'border-primary-300', 'focus:ring-1', 'focus:ring-primary-500', 'outline-none');
+            });
+            document.getElementById('action-bio').classList.add('hidden');
+            document.getElementById('btn-edit-bio').classList.remove('hidden');
+        }
+
+        function saveBiodata(e) {
+            e.preventDefault();
+            const newData = {};
+            ['nama', 'nip', 'ttl', 'mapel', 'pendidikan', 'hp', 'alamat'].forEach(field => {
+                newData[field] = document.getElementById(`bio-${field}`).value;
+            });
+            
+            database.ref('biodata').set(newData).then(() => {
+                cancelEditBiodata();
+                showToast('Biodata berhasil diperbarui di Firebase!');
+            });
+        }
+
+        // ==========================================
+        // SISWA MODULE (FIREBASE WRITES)
+        // ==========================================
+        function renderSiswa() {
+            const tbody = document.getElementById('table-siswa');
+            const search = document.getElementById('search-siswa').value.toLowerCase();
+            tbody.innerHTML = '';
+            
+            let filtered = db.siswa.filter(s => s.nama.toLowerCase().includes(search) || s.nis.includes(search));
+            
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Belum ada data siswa</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((s, index) => {
+                let badge = s.jk === 'L' ? '<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">L</span>' : '<span class="bg-pink-100 text-pink-800 text-xs px-2 py-1 rounded">P</span>';
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-3">${index + 1}</td>
+                        <td class="px-6 py-3 font-medium">${s.nis}</td>
+                        <td class="px-6 py-3">${s.nama}</td>
+                        <td class="px-6 py-3">${badge}</td>
+                        <td class="px-6 py-3 text-center">
+                            <button onclick="openModalSiswa('${s.id}')" class="text-blue-600 hover:text-blue-800 mx-1"><i class="fas fa-edit"></i></button>
+                            <button onclick="hapusSiswa('${s.id}')" class="text-red-600 hover:text-red-800 mx-1"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openModalSiswa(id = null) {
+            const modal = document.getElementById('modal-siswa');
+            const content = document.getElementById('modal-siswa-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            if(id) {
+                const s = db.siswa.find(x => x.id === id);
+                document.getElementById('modal-siswa-title').textContent = 'Edit Siswa';
+                document.getElementById('form-siswa-id').value = s.id;
+                document.getElementById('form-siswa-nis').value = s.nis;
+                document.getElementById('form-siswa-nama').value = s.nama;
+                document.getElementById('form-siswa-jk').value = s.jk;
+            } else {
+                document.getElementById('modal-siswa-title').textContent = 'Tambah Siswa';
+                document.getElementById('form-siswa').reset();
+                document.getElementById('form-siswa-id').value = '';
+            }
+        }
+
+        function closeModalSiswa() {
+            const modal = document.getElementById('modal-siswa');
+            const content = document.getElementById('modal-siswa-content');
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        }
+
+        function simpanSiswa(e) {
+            e.preventDefault();
+            let id = document.getElementById('form-siswa-id').value;
+            const nis = document.getElementById('form-siswa-nis').value;
+            const nama = document.getElementById('form-siswa-nama').value;
+            const jk = document.getElementById('form-siswa-jk').value;
+
+            if(!id) id = 'S' + Date.now(); // Buat ID unik berdasarkan waktu
+            
+            // Simpan ke Firebase
+            database.ref('siswa/' + id).set({ id, nis, nama, jk }).then(() => {
+                showToast('Data siswa berhasil disimpan!');
+                closeModalSiswa();
+            });
+        }
+
+        function hapusSiswa(id) {
+            if(confirm('Apakah Anda yakin ingin menghapus data siswa ini?')) {
+                // Hapus data terkait di Firebase
+                const updates = {};
+                updates['siswa/' + id] = null;
+                updates['nilai/' + id] = null;
+                updates['tugas/' + id] = null;
+                
+                database.ref().update(updates).then(() => {
+                    showToast('Data siswa berhasil dihapus', 'success');
+                });
+            }
+        }
+
+        // ==========================================
+        // ABSENSI MODULE (FIREBASE WRITES)
+        // ==========================================
+        function renderAbsensi() {
+            const tgl = document.getElementById('tgl-absensi').value;
+            const tbody = document.getElementById('table-absensi');
+            tbody.innerHTML = '';
+            
+            if(!tgl || db.siswa.length === 0) return;
+
+            const absHariIni = db.absensi[tgl] || {};
+
+            db.siswa.forEach(s => {
+                const status = absHariIni[s.id] || 'H'; 
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 bg-white">
+                        <td class="px-6 py-3 font-medium text-gray-800 border-r border-gray-100">${s.nama} <br><span class="text-xs text-gray-400">${s.nis}</span></td>
+                        <td class="px-2 py-3 text-center border-r border-gray-100"><input type="radio" name="abs_${s.id}" value="H" ${status==='H'?'checked':''} class="w-4 h-4 text-primary-600"></td>
+                        <td class="px-2 py-3 text-center border-r border-gray-100"><input type="radio" name="abs_${s.id}" value="S" ${status==='S'?'checked':''} class="w-4 h-4 text-yellow-500"></td>
+                        <td class="px-2 py-3 text-center border-r border-gray-100"><input type="radio" name="abs_${s.id}" value="I" ${status==='I'?'checked':''} class="w-4 h-4 text-blue-500"></td>
+                        <td class="px-2 py-3 text-center"><input type="radio" name="abs_${s.id}" value="A" ${status==='A'?'checked':''} class="w-4 h-4 text-red-600"></td>
+                    </tr>
+                `;
+            });
+        }
+
+        function simpanAbsensi() {
+            const tgl = document.getElementById('tgl-absensi').value;
+            if(!tgl) return showToast('Pilih tanggal terlebih dahulu', 'error');
+
+            const absData = {};
+            db.siswa.forEach(s => {
+                const radio = document.querySelector(`input[name="abs_${s.id}"]:checked`);
+                if(radio) absData[s.id] = radio.value;
+            });
+            
+            database.ref('absensi/' + tgl).set(absData).then(() => {
+                showToast(`Absensi tanggal ${tgl} berhasil disimpan`);
+            });
+        }
+
+        // ==========================================
+        // NILAI & TUGAS MODULE (FIREBASE WRITES)
+        // ==========================================
+        function renderNilai() {
+            const tbody = document.getElementById('table-nilai');
+            tbody.innerHTML = '';
+            
+            db.siswa.forEach(s => {
+                const n = db.nilai[s.id] || { uh1:'', uh2:'', uts:'', uas:'' };
+                let rata = '-';
+                if(n.uh1 && n.uh2 && n.uts && n.uas) {
+                    rata = ((Number(n.uh1)+Number(n.uh2)+Number(n.uts)+Number(n.uas))/4).toFixed(1);
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 bg-white">
+                        <td class="px-4 py-3 font-medium text-gray-800 border-r border-gray-100">${s.nama}</td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="n_uh1_${s.id}" value="${n.uh1}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-primary-500" min="0" max="100"></td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="n_uh2_${s.id}" value="${n.uh2}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-primary-500" min="0" max="100"></td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="n_uts_${s.id}" value="${n.uts}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-primary-500" min="0" max="100"></td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="n_uas_${s.id}" value="${n.uas}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-primary-500" min="0" max="100"></td>
+                        <td class="px-4 py-3 text-center font-bold ${rata < 75 && rata !== '-' ? 'text-red-600' : 'text-green-600'}">${rata}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function simpanNilai() {
+            const updates = {};
+            db.siswa.forEach(s => {
+                updates['nilai/' + s.id] = {
+                    uh1: document.getElementById(`n_uh1_${s.id}`).value,
+                    uh2: document.getElementById(`n_uh2_${s.id}`).value,
+                    uts: document.getElementById(`n_uts_${s.id}`).value,
+                    uas: document.getElementById(`n_uas_${s.id}`).value
+                };
+            });
+            database.ref().update(updates).then(() => {
+                showToast('Rekap nilai berhasil disimpan ke Firebase');
+            });
+        }
+
+        function renderTugas() {
+            const tbody = document.getElementById('table-tugas');
+            tbody.innerHTML = '';
+            
+            db.siswa.forEach(s => {
+                const t = db.tugas[s.id] || { t1:'', t2:'', t3:'' };
+                let rata = '-';
+                if(t.t1 && t.t2 && t.t3) {
+                    rata = ((Number(t.t1)+Number(t.t2)+Number(t.t3))/3).toFixed(1);
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50 bg-white">
+                        <td class="px-4 py-3 font-medium text-gray-800 border-r border-gray-100">${s.nama}</td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="t_1_${s.id}" value="${t.t1}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-blue-500" min="0" max="100"></td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="t_2_${s.id}" value="${t.t2}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-blue-500" min="0" max="100"></td>
+                        <td class="px-2 py-2 border-r border-gray-100"><input type="number" id="t_3_${s.id}" value="${t.t3}" class="w-full text-center border border-gray-300 rounded p-1 text-sm outline-none focus:border-blue-500" min="0" max="100"></td>
+                        <td class="px-4 py-3 text-center font-bold text-blue-600">${rata}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function simpanTugas() {
+            const updates = {};
+            db.siswa.forEach(s => {
+                updates['tugas/' + s.id] = {
+                    t1: document.getElementById(`t_1_${s.id}`).value,
+                    t2: document.getElementById(`t_2_${s.id}`).value,
+                    t3: document.getElementById(`t_3_${s.id}`).value
+                };
+            });
+            database.ref().update(updates).then(() => {
+                showToast('Rekap tugas berhasil disimpan ke Firebase', 'success');
+            });
+        }
+
+        // --- DOWNLOAD EXCEL ---
+        function downloadExcel() {
+            let csvContent = "data:text/csv;charset=utf-8,NIS,Nama Siswa,UH 1,UH 2,UTS,UAS,Rata-rata\n";
+            db.siswa.forEach(s => {
+                const n = db.nilai[s.id] || {};
+                let uh1 = Number(n.uh1) || 0, uh2 = Number(n.uh2) || 0, uts = Number(n.uts) || 0, uas = Number(n.uas) || 0;
+                let rata = n.uh1 && n.uh2 && n.uts && n.uas ? ((uh1 + uh2 + uts + uas) / 4).toFixed(1) : '-';
+                csvContent += `="${s.nis}","${s.nama}",${uh1},${uh2},${uts},${uas},${rata}\n`;
+            });
+            triggerDownload(csvContent, "Rekap_Nilai_Siswa.csv");
+        }
+
+        function downloadExcelTugas() {
+            let csvContent = "data:text/csv;charset=utf-8,NIS,Nama Siswa,Tugas 1,Tugas 2,Tugas 3,Rata-rata\n";
+            db.siswa.forEach(s => {
+                const t = db.tugas[s.id] || {};
+                let t1 = Number(t.t1) || 0, t2 = Number(t.t2) || 0, t3 = Number(t.t3) || 0;
+                let rata = t.t1 && t.t2 && t.t3 ? ((t1 + t2 + t3) / 3).toFixed(1) : '-';
+                csvContent += `="${s.nis}","${s.nama}",${t1},${t2},${t3},${rata}\n`;
+            });
+            triggerDownload(csvContent, "Rekap_Tugas_Siswa.csv");
+        }
+
+        function triggerDownload(csvContent, filename) {
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('File Excel berhasil diunduh!', 'success');
+        }
+
+        // ==========================================
+        // RPPH MODULE (FIREBASE WRITES)
+        // ==========================================
+        function renderRPPH() {
+            const list = document.getElementById('list-rpph');
+            list.innerHTML = '';
+            
+            let sorted = [...db.rpph].sort((a,b) => new Date(b.tgl) - new Date(a.tgl));
+            if(sorted.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-sm">Belum ada RPPH yang dibuat.</p>';
+                return;
+            }
+
+            sorted.forEach(r => {
+                const dateObj = new Date(r.tgl);
+                const tglStr = dateObj.toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'});
+                
+                list.innerHTML += `
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition bg-gray-50 relative group">
+                        <div class="absolute top-4 right-4 space-x-2 hidden group-hover:block">
+                            <button onclick="editRPPH('${r.id}')" class="text-blue-500 hover:text-blue-700 bg-white rounded p-1 shadow-sm"><i class="fas fa-edit"></i></button>
+                            <button onclick="hapusRPPH('${r.id}')" class="text-red-500 hover:text-red-700 bg-white rounded p-1 shadow-sm"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <div class="text-xs font-semibold text-primary-600 mb-1"><i class="far fa-calendar-alt mr-1"></i> ${tglStr}</div>
+                        <h4 class="font-bold text-gray-800 mb-2">${r.tema}</h4>
+                        <div class="text-sm text-gray-700 space-y-1">
+                            <p><strong>Tujuan:</strong> ${r.tujuan}</p>
+                            <p><strong>Kegiatan:</strong> ${r.kegiatan}</p>
+                            <p><strong>Penilaian:</strong> ${r.penilaian}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function simpanRPPH(e) {
+            e.preventDefault();
+            let id = document.getElementById('rpph-id').value;
+            if(!id) id = 'R' + Date.now();
+            
+            const data = {
+                id: id,
+                tgl: document.getElementById('rpph-tgl').value,
+                tema: document.getElementById('rpph-tema').value,
+                tujuan: document.getElementById('rpph-tujuan').value,
+                kegiatan: document.getElementById('rpph-kegiatan').value,
+                penilaian: document.getElementById('rpph-penilaian').value
+            };
+
+            database.ref('rpph/' + id).set(data).then(() => {
+                showToast('RPPH berhasil disimpan ke Firebase');
+                resetFormRPPH();
+            });
+        }
+
+        function editRPPH(id) {
+            const r = db.rpph.find(x => x.id === id);
+            document.getElementById('rpph-id').value = r.id;
+            document.getElementById('rpph-tgl').value = r.tgl;
+            document.getElementById('rpph-tema').value = r.tema;
+            document.getElementById('rpph-tujuan').value = r.tujuan;
+            document.getElementById('rpph-kegiatan').value = r.kegiatan;
+            document.getElementById('rpph-penilaian').value = r.penilaian;
+        }
+
+        function hapusRPPH(id) {
+            if(confirm('Hapus RPPH ini?')) {
+                database.ref('rpph/' + id).remove().then(() => {
+                    showToast('RPPH berhasil dihapus');
+                });
+            }
+        }
+
+        function resetFormRPPH() {
+            document.getElementById('form-rpph').reset();
+            document.getElementById('rpph-id').value = '';
+        }
+
+        // ==========================================
+        // KALENDER MODULE
+        // ==========================================
+        let currDate = new Date();
+
+        function renderKalender() {
+            const year = currDate.getFullYear();
+            const month = currDate.getMonth();
+            const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            document.getElementById('cal-month-year').textContent = `${monthNames[month]} ${year}`;
+            
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const grid = document.getElementById('cal-grid');
+            grid.innerHTML = '';
+            
+            for(let i = 0; i < firstDay; i++) {
+                grid.innerHTML += `<div class="p-2 border border-transparent"></div>`;
+            }
+            
+            const today = new Date();
+            for(let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${year}-${String(month+1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                const event = db.kalenderEvents.find(e => e.tgl === dateStr);
+                
+                let classes = "p-2 min-h-[60px] border border-gray-100 rounded flex flex-col justify-start transition hover:bg-gray-50";
+                let isToday = i === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                if(isToday) classes += " bg-primary-50 border-primary-300";
+                
+                let content = `<span class="font-medium text-sm ${isToday ? 'text-primary-700' : 'text-gray-700'}">${i}</span>`;
+                if(event) content += `<div class="text-[10px] mt-1 p-1 rounded leading-tight ${event.warna} line-clamp-2" title="${event.acara}">${event.acara}</div>`;
+                grid.innerHTML += `<div class="${classes}">${content}</div>`;
+            }
+            renderAgenda(month, year);
+        }
+
+        function renderAgenda(month, year) {
+            const container = document.getElementById('cal-events');
+            container.innerHTML = '';
+            
+            const eventsInMonth = db.kalenderEvents.filter(e => {
+                const eDate = new Date(e.tgl);
+                return eDate.getMonth() === month && eDate.getFullYear() === year;
+            });
+
+            if(eventsInMonth.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500">Tidak ada agenda pada bulan ini.</p>';
+                return;
+            }
+
+            eventsInMonth.sort((a,b) => new Date(a.tgl) - new Date(b.tgl)).forEach(e => {
+                const tgl = new Date(e.tgl).getDate();
+                container.innerHTML += `
+                    <div class="flex items-center p-3 rounded-lg border border-gray-100 bg-gray-50">
+                        <div class="h-10 w-10 rounded-full flex items-center justify-center font-bold text-lg mr-3 ${e.warna}">${tgl}</div>
+                        <div class="text-sm font-medium text-gray-800">${e.acara}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function changeMonth(step) {
+            currDate.setMonth(currDate.getMonth() + step);
+            renderKalender();
+        }
+
+    </script>
+</body>
+</html>
