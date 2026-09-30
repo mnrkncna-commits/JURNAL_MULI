@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplikasi Administrasi & Jurnal Guru Terpadu</title>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root { --ink:#15261f; --forest:#0f5b46; --mint:#dff4e9; --paper:#f7f6ef; --line:#dfe5dc; --orange:#e76f3c; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Work Sans",sans-serif; color:var(--ink); background:var(--paper); }
+    button, input, select, textarea { font:inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid #f2b279; outline-offset:2px; }
+    .app-shell { min-height:calc(100 * min(var(--vh, 1vh), 1vh)); }
+    .sidebar { background:#123b30; color:#eaf7ef; }
+    .nav-item { transition:background .18s ease, transform .18s ease; }
+    .nav-item:hover { background:rgba(255,255,255,.1); transform:translateX(2px); }
+    .nav-item.active { background:#f7f6ef; color:#123b30; box-shadow:0 8px 18px rgba(0,0,0,.14); }
+    .summary-card { border:1px solid var(--line); box-shadow:0 10px 30px rgba(29,48,38,.06); }
+    .table-wrap { overflow-x:auto; }
+    table { border-collapse:collapse; min-width:760px; width:100%; }
+    th { color:#587066; font-size:.73rem; letter-spacing:.08em; text-transform:uppercase; background:#f3f5ef; }
+    th, td { padding:.85rem 1rem; text-align:left; border-bottom:1px solid #e7ece5; vertical-align:middle; }
+    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:.28rem .62rem; font-size:.73rem; font-weight:700; white-space:nowrap; }
+    .badge-hadir,.badge-selesai,.badge-positif,.badge-baik,.badge-sangat-baik { background:#dcf4e6; color:#12623d; }
+    .badge-izin,.badge-proses,.badge-perlu,.badge-perlu-bimbingan { background:#fff0cb; color:#8d5c00; }
+    .badge-sakit,.badge-menunggu,.badge-netral { background:#dfeeff; color:#155a9c; }
+    .badge-alpa,.badge-terlambat,.badge-negatif { background:#fee2df; color:#a33a2e; }
+    
+    /* Style Khusus untuk Input Radio Jurnal Absensi */
+    .att-radio { display: none; }
+    .att-label { cursor: pointer; display: inline-block; width: 28px; height: 28px; text-align: center; line-height: 28px; border-radius: 6px; border: 1px solid #cbd7cc; font-size: 12px; font-weight: bold; color: #5a7166; transition: all 0.2s; }
+    .att-label:hover { opacity: 0.8; }
+    .att-radio:checked + .att-label.h { background: #dcf4e6; border-color: #12623d; color: #12623d; }
+    .att-radio:checked + .att-label.i { background: #fff0cb; border-color: #8d5c00; color: #8d5c00; }
+    .att-radio:checked + .att-label.s { background: #dfeeff; border-color: #155a9c; color: #155a9c; }
+    .att-radio:checked + .att-label.a { background: #fee2df; border-color: #a33a2e; color: #a33a2e; }
+
+    .modal-backdrop { background:rgba(14,32,25,.58); backdrop-filter:blur(4px); }
+    .field { width:100%; border:1px solid #cbd7cc; background:#fff; border-radius:.7rem; padding:.68rem .78rem; color:#173228; }
+    .field:focus { border-color:#0f5b46; box-shadow:0 0 0 3px rgba(15,91,70,.13); outline:none; }
+    .form-label { display:block; margin-bottom:.35rem; font-size:.79rem; font-weight:700; color:#355448; }
+    .reveal { animation:reveal .38s ease both; }
+    @keyframes reveal { from {opacity:0; transform:translateY(9px)} to {opacity:1; transform:translateY(0)} }
+    #toast { transition:opacity .25s, transform .25s; }
+    @media (max-width: 768px) {
+      .sidebar { position:fixed; z-index:40; inset:0 auto 0 0; width:17rem; transform:translateX(-105%); transition:transform .25s ease; }
+      .sidebar.open { transform:translateX(0); }
+      .main-area { width:100%; }
+    }
+  </style>
+
+  <script src="https://cdn.tailwindcss.com/3.4.17" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.577.0/dist/umd/lucide.min.js" type="text/javascript"></script>
+
+  <!-- SDK Firebase CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBIX7bEsOgiyHGh-efZMiM2VSuhfqK9qHw",
+      authDomain: "jurnalsimdig.firebaseapp.com",
+      projectId: "jurnalsimdig",
+      storageBucket: "jurnalsimdig.firebasestorage.app",
+      messagingSenderId: "590288172089",
+      appId: "1:590288172089:web:47fed765b62c18d0f189e8"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const recordsRef = db.collection("records");
+
+    window.dataSdk = {
+      init: async function(handler) {
+        try {
+          recordsRef.onSnapshot((snapshot) => {
+            const data = snapshot.docs.map(doc => ({
+              ...doc.data(),
+              __backendId: doc.id
+            }));
+            handler.onDataChanged(data);
+          }, (error) => { console.error("Firestore Error:", error); });
+          return { isOk: true };
+        } catch (error) { return { isOk: false }; }
+      },
+      create: async function(item) {
+        try {
+          const docRef = await recordsRef.add(item);
+          return { isOk: true, id: docRef.id };
+        } catch (error) { return { isOk: false }; }
+      },
+      update: async function(item) {
+        try {
+          const id = item.__backendId;
+          const { __backendId, ...updateData } = item;
+          await recordsRef.doc(id).update(updateData);
+          return { isOk: true };
+        } catch (error) { return { isOk: false }; }
+      },
+      delete: async function(item) {
+        try {
+          await recordsRef.doc(item.__backendId).delete();
+          return { isOk: true };
+        } catch (error) { return { isOk: false }; }
+      }
+    };
+  </script>
+</head>
+<body class="flex flex-col md:flex-row app-shell">
+  <!-- Sidebar -->
+  <aside id="sidebar" class="sidebar flex-shrink-0 flex flex-col p-5 md:w-64 w-[17rem]">
+    <div class="flex items-center gap-3 mb-10 pl-2">
+      <div class="bg-[#24a87a] text-white p-2.5 rounded-[0.8rem]"><i data-lucide="book-open-check"></i></div>
+      <div>
+        <h1 class="text-[1.05rem] font-extrabold tracking-tight leading-tight">Jurnal Guru<br>Terpadu</h1>
+      </div>
+    </div>
+    <nav class="flex flex-col gap-1.5 flex-grow font-semibold text-[0.92rem]">
+      <a href="#" onclick="showView('dashboard'); return false;" class="nav-item active flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="dashboard"><i data-lucide="layout-dashboard" class="w-5 h-5 opacity-90"></i> Dashboard Utama</a>
+      <div class="text-xs font-bold uppercase tracking-wider text-[#79a695] mt-5 mb-1 px-3">Administrasi</div>
+      <a href="#" onclick="showView('biodata'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="biodata"><i data-lucide="book-user" class="w-5 h-5 opacity-90"></i> Biodata Siswa</a>
+      <a href="#" onclick="showView('calendar'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="calendar"><i data-lucide="calendar-days" class="w-5 h-5 opacity-90"></i> Kalender Akademik</a>
+      <a href="#" onclick="showView('rpph'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="rpph"><i data-lucide="file-text" class="w-5 h-5 opacity-90"></i> RPPH & Materi</a>
+      <div class="text-xs font-bold uppercase tracking-wider text-[#79a695] mt-5 mb-1 px-3">Kegiatan & Evaluasi</div>
+      <a href="#" onclick="showView('attendance'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="attendance"><i data-lucide="check-square" class="w-5 h-5 opacity-90"></i> Daftar Hadir</a>
+      <a href="#" onclick="showView('tasks'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="tasks"><i data-lucide="list-todo" class="w-5 h-5 opacity-90"></i> Agenda & Tugas</a>
+      <a href="#" onclick="showView('behavior'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="behavior"><i data-lucide="smile" class="w-5 h-5 opacity-90"></i> Sikap & Perilaku</a>
+      <a href="#" onclick="showView('grades'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="grades"><i data-lucide="award" class="w-5 h-5 opacity-90"></i> Daftar Nilai</a>
+      <a href="#" onclick="showView('rekap_tugas'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="rekap_tugas"><i data-lucide="clipboard-list" class="w-5 h-5 opacity-90"></i> Rekap Tugas</a>
+      <div class="text-xs font-bold uppercase tracking-wider text-[#79a695] mt-5 mb-1 px-3">Laporan</div>
+      <a href="#" onclick="showView('journal'); return false;" class="nav-item flex items-center gap-3.5 px-3 py-2.5 rounded-[0.7rem]" data-target="journal"><i data-lucide="book" class="w-5 h-5 opacity-90"></i> Jurnal Mengajar</a>
+    </nav>
+  </aside>
+
+  <!-- Overlay Mobile Sidebar -->
+  <div id="mobile-overlay" class="fixed inset-0 z-30 hidden modal-backdrop" onclick="document.getElementById('sidebar').classList.remove('open'); this.classList.add('hidden')"></div>
+
+  <!-- Main Content -->
+  <main class="main-area flex-grow flex flex-col h-screen overflow-hidden relative">
+    <header class="bg-white border-b border-[#e7ece5] p-4 lg:p-6 flex items-center justify-between z-10 flex-shrink-0">
+      <div class="flex items-center gap-4">
+        <button class="md:hidden p-2 -ml-2 rounded-lg hover:bg-gray-100" onclick="document.getElementById('sidebar').classList.add('open'); document.getElementById('mobile-overlay').classList.remove('hidden')">
+          <i data-lucide="menu"></i>
+        </button>
+        <div>
+          <h2 id="header-title" class="text-xl font-bold">Dashboard</h2>
+          <p id="header-desc" class="text-sm text-gray-500 font-medium">Ringkasan aktivitas hari ini.</p>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <!-- Tombol Tambah Data Standar -->
+        <button id="add-button" onclick="openModal()" class="hidden items-center gap-2 rounded-[0.6rem] bg-[#0f5b46] px-4 py-2 font-bold text-sm text-white hover:bg-[#0a4635] transition-colors"><i data-lucide="plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Tambah Data</span></button>
+        <!-- Tombol Input Siswa Khusus untuk Modul Jurnal Masal -->
+        <button id="input-student-button" onclick="openModal('student')" class="hidden items-center gap-2 rounded-[0.6rem] bg-gray-800 px-4 py-2 font-bold text-sm text-white hover:bg-gray-900 transition-colors"><i data-lucide="user-plus" class="w-4 h-4"></i> <span class="hidden sm:inline">Input Siswa</span></button>
+        <button onclick="exportData()" title="Export CSV" class="items-center justify-center rounded-[0.6rem] border border-gray-300 bg-white px-3 py-2 hover:bg-gray-50 transition-colors flex"><i data-lucide="download" class="w-4 h-4 text-gray-700"></i></button>
+      </div>
+    </header>
+
+    <div class="flex-grow overflow-y-auto p-4 lg:p-6 pb-24" id="main-scroll">
+      <div id="loading" class="flex flex-col items-center justify-center h-40 gap-3 text-gray-400">
+        <div class="w-6 h-6 border-3 border-gray-200 border-t-[#0f5b46] rounded-full animate-spin"></div>
+        <p class="text-sm font-semibold">Memuat data...</p>
+      </div>
+
+      <!-- Dashboard View -->
+      <div id="dashboard-view" class="hidden reveal">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+          <div class="bg-white rounded-[1.2rem] p-5 summary-card flex flex-col justify-between">
+            <div class="flex justify-between items-start mb-2"><div class="bg-blue-50 p-2.5 rounded-xl text-blue-600"><i data-lucide="users"></i></div></div>
+            <div class="text-3xl font-extrabold tracking-tight" id="dash-students">-</div><div class="text-sm font-semibold text-gray-500 mt-1">Total Siswa Terdaftar</div>
+          </div>
+          <div class="bg-white rounded-[1.2rem] p-5 summary-card flex flex-col justify-between">
+            <div class="flex justify-between items-start mb-2"><div class="bg-green-50 p-2.5 rounded-xl text-green-600"><i data-lucide="check-circle"></i></div></div>
+            <div class="text-3xl font-extrabold tracking-tight" id="dash-attendance">-</div><div class="text-sm font-semibold text-gray-500 mt-1">Kehadiran Hari Ini (Hadir)</div>
+          </div>
+          <div class="bg-white rounded-[1.2rem] p-5 summary-card flex flex-col justify-between">
+            <div class="flex justify-between items-start mb-2"><div class="bg-orange-50 p-2.5 rounded-xl text-orange-600"><i data-lucide="clock"></i></div></div>
+            <div class="text-3xl font-extrabold tracking-tight" id="dash-tasks">-</div><div class="text-sm font-semibold text-gray-500 mt-1">Tugas Aktif (Pending)</div>
+          </div>
+          <div class="bg-white rounded-[1.2rem] p-5 summary-card flex flex-col justify-between">
+            <div class="flex justify-between items-start mb-2"><div class="bg-purple-50 p-2.5 rounded-xl text-purple-600"><i data-lucide="book-open"></i></div></div>
+            <div class="text-3xl font-extrabold tracking-tight" id="dash-rpph">-</div><div class="text-sm font-semibold text-gray-500 mt-1">RPPH Selesai</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div class="xl:col-span-2 bg-white rounded-[1.2rem] p-6 summary-card">
+            <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="activity" class="w-5 h-5 text-gray-400"></i> Log Aktivitas Terbaru</h3>
+            <div id="recent-activity" class="space-y-4"></div>
+          </div>
+          <div class="bg-white rounded-[1.2rem] p-6 summary-card">
+            <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i data-lucide="alert-circle" class="w-5 h-5 text-gray-400"></i> Perhatian Khusus</h3>
+            <div id="alerts-container" class="space-y-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data View (List/Table/Journal Mode) -->
+      <div id="data-view" class="hidden bg-white rounded-[1.2rem] summary-card reveal">
+        <div id="search-filter-bar" class="p-4 border-b border-[#e7ece5] flex flex-col md:flex-row gap-3">
+          <div class="relative flex-grow">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+            <input type="text" id="search-input" placeholder="Cari data..." class="field pl-9 py-2 text-sm" oninput="renderTable()">
+          </div>
+          <select id="filter-select" class="field py-2 text-sm md:w-48 bg-gray-50" onchange="renderTable()"><option value="">Semua Filter</option></select>
+        </div>
+        <div class="table-wrap" id="table-container"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal/Form -->
+  <div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop p-4">
+    <div class="bg-white rounded-[1.4rem] w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b border-[#e7ece5] flex justify-between items-center bg-gray-50 rounded-t-[1.4rem]">
+        <h3 id="modal-title" class="font-extrabold text-lg">Tambah Data</h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-800 p-1"><i data-lucide="x"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-grow" id="form-body"></div>
+      <div class="p-5 border-t border-[#e7ece5] flex justify-end gap-3 bg-gray-50 rounded-b-[1.4rem]">
+        <button onclick="closeModal()" class="px-5 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-200">Batal</button>
+        <button id="save-btn" onclick="saveData()" class="px-5 py-2.5 rounded-xl bg-[#0f5b46] font-bold text-sm text-white hover:bg-[#0a4635] flex items-center gap-2">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-3 rounded-full font-semibold text-sm shadow-xl flex items-center gap-2 opacity-0 pointer-events-none translate-y-4 z-50">
+    <i data-lucide="check-circle" class="w-4 h-4 text-green-400"></i> <span id="toast-msg">Tersimpan</span>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    let allData = [];
+    let activeView = 'dashboard';
+    let currentEditId = null;
+    let specificFormType = null; 
+
+    // Konfigurasi Skema Modul
+    const modules = {
+      dashboard: { title: "Dashboard", desc: "Ringkasan aktivitas dan peringatan." },
+      biodata: {
+        title: "Biodata Siswa", desc: "Data induk siswa.", recordType: "student",
+        fields: [
+          { name: "student_name", label: "Nama Lengkap", type: "text", required: true },
+          { name: "nis", label: "NIS", type: "text" },
+          { name: "class_name", label: "Kelas", type: "select", options: ["X", "XI", "XII"] },
+          { name: "gender", label: "Jenis Kelamin", type: "select", options: ["L", "P"] },
+          { name: "parent_contact", label: "Jurusan", type: "text" }
+        ],
+        cols: ["Nama", "NIS", "Kelas", "L/P", "Jurusan"],
+        renderRow: (r) => `<td><div class="font-bold">${r.student_name}</div></td><td>${r.nis||'-'}</td><td>${r.class_name||'-'}</td><td>${r.gender||'-'}</td><td>${r.parent_contact||'-'}</td>`
+      },
+      calendar: {
+        title: "Kalender Akademik", desc: "Jadwal kegiatan sekolah.", recordType: "calendar",
+        fields: [
+          { name: "date", label: "Tanggal", type: "date", required: true },
+          { name: "event_name", label: "Nama Kegiatan", type: "text", required: true },
+          { name: "event_type", label: "Jenis", type: "select", options: ["Libur", "Ujian", "Rapat", "Lainnya"] },
+          { name: "description", label: "Keterangan", type: "textarea" }
+        ],
+        cols: ["Tanggal", "Kegiatan", "Jenis", "Keterangan"],
+        renderRow: (r) => `<td><div class="font-bold">${formatDate(r.date)}</div></td><td>${r.event_name}</td><td>${badge(r.event_type)}</td><td class="text-sm max-w-xs truncate">${r.description||'-'}</td>`
+      },
+      rpph: {
+        title: "RPPH & Materi", desc: "Rencana Pelaksanaan Pembelajaran Harian.", recordType: "rpph",
+        fields: [
+          { name: "date", label: "Tanggal Pelaksanaan", type: "date", required: true },
+          { name: "subject", label: "Mata Pelajaran", type: "text", required: true },
+          { name: "topic", label: "Topik/Materi", type: "text", required: true },
+          { name: "status", label: "Status Pelaksanaan", type: "select", options: ["Selesai", "Proses", "Tertunda"] },
+          { name: "evaluation", label: "Evaluasi/Refleksi", type: "textarea" }
+        ],
+        cols: ["Tanggal", "Mapel", "Topik", "Status", "Evaluasi"],
+        renderRow: (r) => `<td>${formatDate(r.date)}</td><td><div class="font-bold">${r.subject}</div></td><td>${r.topic}</td><td>${badge(r.status)}</td><td class="text-sm max-w-xs truncate">${r.evaluation||'-'}</td>`
+      },
+      attendance: { title: "Daftar Hadir (Jurnal)", desc: "Input kehadiran siswa format jurnal masal.", recordType: "attendance" },
+      tasks: {
+        title: "Agenda & Tugas", desc: "Manajemen tugas siswa.", recordType: "task",
+        fields: [
+          { name: "task_name", label: "Nama Tugas", type: "text", required: true },
+          { name: "subject", label: "Mata Pelajaran", type: "text" },
+          { name: "due_date", label: "Tenggat Waktu", type: "date", required: true },
+          { name: "class_target", label: "Target Kelas", type: "select", options: ["X", "XI", "XII", "Semua"] },
+          { name: "status", label: "Status", type: "select", options: ["Aktif", "Selesai", "Terlambat"] }
+        ],
+        cols: ["Tugas", "Mapel", "Tenggat", "Kelas", "Status"],
+        renderRow: (r) => `<td><div class="font-bold">${r.task_name}</div></td><td>${r.subject||'-'}</td><td>${formatDate(r.due_date)}</td><td>${r.class_target||'-'}</td><td>${badge(r.status)}</td>`
+      },
+      behavior: {
+        title: "Sikap & Perilaku", desc: "Catatan anekdotal siswa.", recordType: "behavior",
+        fields: [
+          { name: "date", label: "Tanggal", type: "date", required: true },
+          { name: "student_name", label: "Nama Siswa", type: "student_select", required: true },
+          { name: "behavior_type", label: "Kategori", type: "select", options: ["Positif", "Netral", "Negatif"] },
+          { name: "incident", label: "Deskripsi Kejadian", type: "textarea", required: true },
+          { name: "action_taken", label: "Tindakan/Solusi", type: "textarea" }
+        ],
+        cols: ["Tanggal", "Siswa", "Kategori", "Kejadian", "Tindakan"],
+        renderRow: (r) => `<td>${formatDate(r.date)}</td><td><div class="font-bold">${r.student_name}</div></td><td>${badge(r.behavior_type)}</td><td class="text-sm max-w-xs truncate">${r.incident}</td><td class="text-sm max-w-xs truncate">${r.action_taken||'-'}</td>`
+      },
+      grades: { title: "Daftar Nilai (Jurnal)", desc: "Input nilai evaluasi (UH1, UH2, UTS, UAS).", recordType: "grades" },
+      rekap_tugas: { title: "Rekap Tugas", desc: "Input nilai rekapitulasi tugas (TU 1 - TU 5).", recordType: "rekap_tugas" },
+      journal: {
+        title: "Jurnal Mengajar", desc: "Catatan harian guru.", recordType: "teaching_journal",
+        fields: [
+          { name: "date", label: "Tanggal", type: "date", required: true },
+          { name: "class_name", label: "Kelas", type: "select", options: ["X", "XI", "XII"] },
+          { name: "activities", label: "Uraian Kegiatan", type: "textarea", required: true },
+          { name: "notes", label: "Catatan Khusus", type: "textarea" }
+        ],
+        cols: ["Tanggal", "Kelas", "Kegiatan", "Catatan"],
+        renderRow: (r) => `<td>${formatDate(r.date)}</td><td><div class="font-bold text-center">${r.class_name}</div></td><td class="text-sm">${r.activities}</td><td class="text-sm">${r.notes||'-'}</td>`
+      }
+    };
+
+    const studentFields = modules.biodata.fields; 
+
+    window.onload = () => {
+      window.dataSdk.init({
+        onDataChanged: (data) => {
+          allData = data || [];
+          document.getElementById("loading").classList.add("hidden");
+          refreshCurrentView();
+        }
+      });
+    };
+
+    function recordsFor(type) { return allData.filter(d => d.record_type === type).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)); }
+    function formatDate(dateStr) {
+      if(!dateStr) return '-';
+      const d = new Date(dateStr);
+      return isNaN(d) ? dateStr : d.toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'});
+    }
+    function badge(text) {
+      if(!text) return '-';
+      const cl = text.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      return `<span class="badge badge-${cl}">${text}</span>`;
+    }
+
+    // Fungsi Pembantu: Mengambil Daftar Jurusan Unik dari Data Biodata Siswa
+    function getJurusanList() {
+      const allStudents = recordsFor("student");
+      const list = allStudents.map(s => s.parent_contact || s.jurusan).filter(Boolean);
+      return Array.from(new Set(list)).sort();
+    }
+
+    function showView(viewName) {
+      activeView = viewName;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelector(`[data-target="${viewName}"]`)?.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('mobile-overlay').classList.add('hidden');
+
+      const mod = modules[viewName];
+      document.getElementById("header-title").innerText = mod.title;
+      document.getElementById("header-desc").innerText = mod.desc;
+
+      const isJournalMode = (viewName === "attendance" || viewName === "grades" || viewName === "rekap_tugas");
+      
+      document.getElementById("dashboard-view").classList.toggle("hidden", viewName !== 'dashboard');
+      document.getElementById("data-view").classList.toggle("hidden", viewName === 'dashboard');
+      
+      document.getElementById("add-button").classList.toggle("hidden", viewName === 'dashboard' || isJournalMode);
+      document.getElementById("search-filter-bar").classList.toggle("hidden", isJournalMode);
+      
+      // Tampilkan tombol Input Siswa di modul yang bersifat matriks/jurnal masal
+      document.getElementById("input-student-button").classList.toggle("hidden", !isJournalMode);
+
+      document.getElementById("search-input").value = "";
+      refreshCurrentView();
+    }
+
+    function refreshCurrentView() {
+      if (activeView === 'dashboard') {
+        const std = recordsFor("student").length;
+        const today = new Date().toISOString().slice(0,10);
+        const att = recordsFor("attendance").filter(a => a.date === today && a.attendance_status === "Hadir").length;
+        const tsk = recordsFor("task").filter(t => t.status === "Aktif").length;
+        const rpph = recordsFor("rpph").filter(r => r.status === "Selesai").length;
+        
+        document.getElementById("dash-students").innerText = std;
+        document.getElementById("dash-attendance").innerText = att;
+        document.getElementById("dash-tasks").innerText = tsk;
+        document.getElementById("dash-rpph").innerText = rpph;
+
+        const recents = allData.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).slice(0, 5);
+        let logHtml = "";
+        recents.forEach(r => {
+          let icon = "file-text", text = "Data ditambahkan";
+          if(r.record_type === "student") { icon="user"; text=`Siswa baru: ${r.student_name}`; }
+          if(r.record_type === "task") { icon="list-todo"; text=`Tugas baru: ${r.task_name}`; }
+          if(r.record_type === "attendance") { icon="check-square"; text=`Absensi ${r.student_name}: ${r.attendance_status}`; }
+          logHtml += `<div class="flex items-center gap-3 pb-3 border-b border-gray-100 last:border-0"><div class="bg-gray-100 p-2 rounded-full text-gray-500"><i data-lucide="${icon}" class="w-4 h-4"></i></div><div class="text-sm font-medium">${text} <span class="text-xs text-gray-400 ml-2">${formatDate(r.created_at)}</span></div></div>`;
+        });
+        document.getElementById("recent-activity").innerHTML = logHtml || '<p class="text-sm text-gray-500">Belum ada aktivitas.</p>';
+
+        const alertsHtml = [];
+        const tskAlert = recordsFor("task").filter(t => t.status === "Aktif" && new Date(t.due_date) < new Date());
+        if(tskAlert.length) alertsHtml.push(`<div class="bg-red-50 text-red-700 p-3 rounded-xl text-sm font-bold flex gap-2 items-center"><i data-lucide="alert-triangle" class="w-4 h-4"></i> ${tskAlert.length} Tugas melewati tenggat!</div>`);
+        const bhvAlert = recordsFor("behavior").filter(b => b.behavior_type === "Negatif").slice(0,2);
+        bhvAlert.forEach(b => alertsHtml.push(`<div class="bg-orange-50 text-orange-800 p-3 rounded-xl text-sm font-semibold flex gap-2 items-start"><i data-lucide="info" class="w-4 h-4 mt-0.5"></i> <div>Perhatian: ${b.student_name} (${b.incident})</div></div>`));
+        document.getElementById("alerts-container").innerHTML = alertsHtml.length ? alertsHtml.join("") : '<p class="text-sm text-gray-500">Semua aman. Tidak ada peringatan khusus.</p>';
+        lucide.createIcons();
+      } else {
+        renderTable();
+      }
+    }
+
+    function renderTable() {
+      if (activeView === "attendance") return renderAttendanceJournal();
+      if (activeView === "grades") return renderGradesJournal();
+      if (activeView === "rekap_tugas") return renderRekapTugasJournal();
+
+      const mod = modules[activeView];
+      const host = document.getElementById("table-container");
+      let data = recordsFor(mod.recordType);
+
+      const q = document.getElementById("search-input").value.toLowerCase();
+      if (q) {
+        data = data.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
+      }
+
+      if (data.length === 0) {
+        host.innerHTML = `<div class="p-10 text-center text-gray-400"><i data-lucide="folder-open" class="w-12 h-12 mx-auto mb-3 opacity-50"></i><p>Tidak ada data ditemukan.</p></div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      let html = `<table><thead><tr>`;
+      mod.cols.forEach(c => html += `<th>${c}</th>`);
+      html += `<th class="text-right">Aksi</th></tr></thead><tbody>`;
+      
+      data.forEach(r => {
+        html += `<tr class="hover:bg-gray-50 transition-colors">
+          ${mod.renderRow(r)}
+          <td class="text-right">
+            <button onclick='editData(${JSON.stringify(r).replace(/'/g, "&apos;")})' class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+            <button onclick='deleteData("${r.__backendId}")' class="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      host.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    /* ====================================================================
+       RENDER JURNAL ABSENSI
+       ==================================================================== */
+    function renderAttendanceJournal() {
+      const host = document.getElementById("table-container");
+      const dateVal = document.getElementById("filter-date-att")?.value || new Date().toISOString().slice(0, 10);
+      const classVal = document.getElementById("filter-class-att")?.value || "X";
+      const jurusanVal = document.getElementById("filter-jurusan-att")?.value || "";
+
+      const jurusanList = getJurusanList();
+
+      let headerHtml = `
+        <div class="flex gap-4 mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm flex-wrap">
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Tanggal Kehadiran</label><input type="date" id="filter-date-att" class="field py-1.5 text-sm w-40" value="${dateVal}" onchange="renderAttendanceJournal()"></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Kelas</label><select id="filter-class-att" class="field py-1.5 text-sm w-32" onchange="renderAttendanceJournal()"><option ${classVal==="X"?"selected":""}>X</option><option ${classVal==="XI"?"selected":""}>XI</option><option ${classVal==="XII"?"selected":""}>XII</option></select></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Jurusan</label><select id="filter-jurusan-att" class="field py-1.5 text-sm w-44" onchange="renderAttendanceJournal()">
+              <option value="">Semua Jurusan</option>
+              ${jurusanList.map(j => `<option value="${j}" ${jurusanVal===j?"selected":""}>${j}</option>`).join('')}
+          </select></div>
+        </div>
+        <div id="journal-table-wrap"></div>
+      `;
+      host.innerHTML = headerHtml;
+
+      const wrap = document.getElementById("journal-table-wrap");
+      let students = recordsFor("student").filter(s => s.class_name === classVal);
+      if (jurusanVal) {
+        students = students.filter(s => (s.parent_contact || s.jurusan) === jurusanVal);
+      }
+      
+      if (!students.length) {
+        wrap.innerHTML = `<div class="p-10 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-300"><i data-lucide="users" class="w-10 h-10 mx-auto mb-2 opacity-50"></i><p>Belum ada siswa terdaftar di kelas ${classVal}${jurusanVal ? ' jurusan ' + jurusanVal : ''}.<br>Silakan klik tombol <b>Input Siswa</b> di atas.</p></div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      const attendances = recordsFor("attendance").filter(a => a.date === dateVal && a.class_name === classVal);
+
+      let tableHtml = `<table><thead><tr><th style="width:40px">No</th><th>Nama Siswa</th><th style="width:180px" class="text-center">Kehadiran</th><th>Catatan Guru</th></tr></thead><tbody>`;
+
+      students.sort((a,b) => a.student_name.localeCompare(b.student_name)).forEach((s, idx) => {
+        const rec = attendances.find(a => a.student_name === s.student_name) || {};
+        const status = rec.attendance_status || "Hadir"; 
+        const jurText = s.parent_contact || s.jurusan || "";
+        
+        tableHtml += `
+        <tr data-student="${s.student_name}" data-id="${rec.__backendId || ''}">
+            <td class="text-gray-500 font-medium">${idx + 1}</td>
+            <td class="font-bold text-gray-800">${s.student_name} ${jurText ? `<span class="text-xs font-normal text-gray-500 block">${jurText}</span>` : ''}</td>
+            <td align="center">
+                <div class="flex gap-1.5 justify-center">
+                    <input type="radio" class="att-radio" id="h_${idx}" name="att_${idx}" value="Hadir" ${status==="Hadir"?"checked":""}>
+                    <label class="att-label h" for="h_${idx}" title="Hadir">H</label>
+                    <input type="radio" class="att-radio" id="i_${idx}" name="att_${idx}" value="Izin" ${status==="Izin"?"checked":""}>
+                    <label class="att-label i" for="i_${idx}" title="Izin">I</label>
+                    <input type="radio" class="att-radio" id="s_${idx}" name="att_${idx}" value="Sakit" ${status==="Sakit"?"checked":""}>
+                    <label class="att-label s" for="s_${idx}" title="Sakit">S</label>
+                    <input type="radio" class="att-radio" id="a_${idx}" name="att_${idx}" value="Alpa" ${status==="Alpa"?"checked":""}>
+                    <label class="att-label a" for="a_${idx}" title="Alpa">A</label>
+                </div>
+            </td>
+            <td><input type="text" class="field py-1.5 text-sm bg-gray-50 focus:bg-white att-note" placeholder="Tambahkan catatan..." value="${rec.note || ''}"></td>
+        </tr>`;
+      });
+
+      tableHtml += `</tbody></table>
+      <div class="p-5 mt-4 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-xl">
+          <button type="button" onclick="saveBulkAttendance()" class="rounded-[0.6rem] bg-[#0f5b46] px-6 py-2.5 font-bold text-white hover:bg-[#0a4635] shadow-lg flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Absensi Kelas ${classVal}${jurusanVal ? ' (' + jurusanVal + ')' : ''}</button>
+      </div>`;
+
+      wrap.innerHTML = tableHtml;
+      lucide.createIcons();
+    }
+
+    async function saveBulkAttendance() {
+      const dateVal = document.getElementById("filter-date-att").value;
+      const classVal = document.getElementById("filter-class-att").value;
+      const jurusanVal = document.getElementById("filter-jurusan-att")?.value || "";
+      const rows = document.querySelectorAll("#journal-table-wrap tbody tr");
+      const btn = document.querySelector("button[onclick='saveBulkAttendance()']");
+      setPending(btn, true);
+
+      const promises = [];
+      rows.forEach((tr, idx) => {
+          const studentName = tr.dataset.student;
+          const id = tr.dataset.id;
+          const status = tr.querySelector(`input[name="att_${idx}"]:checked`).value;
+          const note = tr.querySelector(".att-note").value;
+          const payload = { record_type: "attendance", student_name: studentName, class_name: classVal, jurusan: jurusanVal, date: dateVal, attendance_status: status, note: note, created_at: new Date().toISOString() };
+          if (id) { payload.__backendId = id; promises.push(window.dataSdk.update(payload)); }
+          else { promises.push(window.dataSdk.create(payload)); }
+      });
+      await Promise.all(promises);
+      showToast(`Absensi kelas ${classVal}${jurusanVal ? ' (' + jurusanVal + ')' : ''} disimpan`);
+      setPending(btn, false);
+    }
+
+    /* ====================================================================
+       RENDER JURNAL DAFTAR NILAI (UH 1, UH 2, UTS, UAS)
+       ==================================================================== */
+    function renderGradesJournal() {
+      const host = document.getElementById("table-container");
+      const classVal = document.getElementById("filter-class-grade")?.value || "X";
+      const mapelVal = document.getElementById("filter-mapel")?.value || "Bahasa Indonesia";
+      const jurusanVal = document.getElementById("filter-jurusan-grade")?.value || "";
+
+      const jurusanList = getJurusanList();
+
+      let headerHtml = `
+        <div class="flex gap-4 mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm flex-wrap">
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Kelas</label><select id="filter-class-grade" class="field py-1.5 text-sm w-32" onchange="renderGradesJournal()"><option ${classVal==="X"?"selected":""}>X</option><option ${classVal==="XI"?"selected":""}>XI</option><option ${classVal==="XII"?"selected":""}>XII</option></select></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Jurusan</label><select id="filter-jurusan-grade" class="field py-1.5 text-sm w-44" onchange="renderGradesJournal()">
+              <option value="">Semua Jurusan</option>
+              ${jurusanList.map(j => `<option value="${j}" ${jurusanVal===j?"selected":""}>${j}</option>`).join('')}
+          </select></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Mata Pelajaran</label><select id="filter-mapel" class="field py-1.5 text-sm w-48" onchange="renderGradesJournal()">
+              <option ${mapelVal==="Bahasa Indonesia"?"selected":""}>Bahasa Indonesia</option>
+              <option ${mapelVal==="Matematika"?"selected":""}>Matematika</option>
+              <option ${mapelVal==="IPA"?"selected":""}>IPA</option>
+              <option ${mapelVal==="Simdig"?"selected":""}>Simdig</option>
+              <option ${mapelVal==="Penjas"?"selected":""}>Penjas</option>
+          </select></div>
+        </div>
+        <div id="journal-table-wrap"></div>
+      `;
+      host.innerHTML = headerHtml;
+
+      const wrap = document.getElementById("journal-table-wrap");
+      let students = recordsFor("student").filter(s => s.class_name === classVal);
+      if (jurusanVal) {
+        students = students.filter(s => (s.parent_contact || s.jurusan) === jurusanVal);
+      }
+      
+      if (!students.length) {
+        wrap.innerHTML = `<div class="p-10 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-300"><i data-lucide="award" class="w-10 h-10 mx-auto mb-2 opacity-50"></i><p>Belum ada siswa terdaftar di kelas ${classVal}${jurusanVal ? ' jurusan ' + jurusanVal : ''}.<br>Gunakan modul Biodata untuk menambah siswa.</p></div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      const grades = recordsFor("grades").filter(g => g.class_name === classVal && g.subject === mapelVal);
+
+      let tableHtml = `<table><thead><tr><th style="width:40px">No</th><th>Nama Siswa</th><th class="text-center" style="width:90px">UH 1</th><th class="text-center" style="width:90px">UH 2</th><th class="text-center" style="width:90px">UTS</th><th class="text-center" style="width:90px">UAS</th><th class="text-center bg-gray-200" style="width:100px">Akhir (Rata2)</th></tr></thead><tbody>`;
+
+      students.sort((a,b) => a.student_name.localeCompare(b.student_name)).forEach((s, idx) => {
+        const rec = grades.find(g => g.student_name === s.student_name) || {};
+        const jurText = s.parent_contact || s.jurusan || "";
+        tableHtml += `
+        <tr data-student="${s.student_name}" data-id="${rec.__backendId || ''}">
+            <td class="text-gray-500 font-medium">${idx + 1}</td>
+            <td class="font-bold text-gray-800">${s.student_name} ${jurText ? `<span class="text-xs font-normal text-gray-500 block">${jurText}</span>` : ''}</td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold g-uh1" value="${rec.score_uh1 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold g-uh2" value="${rec.score_uh2 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold g-uts" value="${rec.score_uts || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold g-uas" value="${rec.score_uas || ''}" placeholder="0"></td>
+            <td class="bg-gray-50"><input type="number" class="field py-1.5 w-full text-center font-extrabold text-[#0f5b46] bg-transparent border-none g-akhir" value="${rec.score_akhir || 0}" readonly tabindex="-1"></td>
+        </tr>`;
+      });
+
+      tableHtml += `</tbody></table>
+      <div class="p-5 mt-4 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-xl">
+          <button type="button" onclick="saveBulkGrades()" class="rounded-[0.6rem] bg-[#0f5b46] px-6 py-2.5 font-bold text-white hover:bg-[#0a4635] shadow-lg flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Buku Nilai</button>
+      </div>`;
+
+      wrap.innerHTML = tableHtml;
+      lucide.createIcons();
+
+      wrap.querySelectorAll("input[type='number']:not(.g-akhir)").forEach(inp => {
+          inp.addEventListener("input", (e) => {
+              const tr = e.target.closest("tr");
+              const uh1 = Number(tr.querySelector(".g-uh1").value) || 0;
+              const uh2 = Number(tr.querySelector(".g-uh2").value) || 0;
+              const uts = Number(tr.querySelector(".g-uts").value) || 0;
+              const uas = Number(tr.querySelector(".g-uas").value) || 0;
+              let count = 0, sum = 0;
+              if(tr.querySelector(".g-uh1").value !== "") { sum+=uh1; count++; }
+              if(tr.querySelector(".g-uh2").value !== "") { sum+=uh2; count++; }
+              if(tr.querySelector(".g-uts").value !== "") { sum+=uts; count++; }
+              if(tr.querySelector(".g-uas").value !== "") { sum+=uas; count++; }
+              const akhir = count === 0 ? 0 : Math.round(sum / count);
+              tr.querySelector(".g-akhir").value = akhir;
+          });
+      });
+    }
+
+    async function saveBulkGrades() {
+      const classVal = document.getElementById("filter-class-grade").value;
+      const mapelVal = document.getElementById("filter-mapel").value;
+      const jurusanVal = document.getElementById("filter-jurusan-grade")?.value || "";
+      const rows = document.querySelectorAll("#journal-table-wrap tbody tr");
+      const btn = document.querySelector("button[onclick='saveBulkGrades()']");
+      setPending(btn, true);
+
+      const promises = [];
+      rows.forEach((tr) => {
+          const studentName = tr.dataset.student;
+          const id = tr.dataset.id;
+          const uh1Val = tr.querySelector(".g-uh1").value;
+          const uh2Val = tr.querySelector(".g-uh2").value;
+          const utsVal = tr.querySelector(".g-uts").value;
+          const uasVal = tr.querySelector(".g-uas").value;
+
+          if (!uh1Val && !uh2Val && !utsVal && !uasVal && !id) return; 
+
+          const payload = {
+              record_type: "grades",
+              student_name: studentName,
+              class_name: classVal,
+              jurusan: jurusanVal,
+              subject: mapelVal,
+              score_uh1: Number(uh1Val) || 0,
+              score_uh2: Number(uh2Val) || 0,
+              score_uts: Number(utsVal) || 0,
+              score_uas: Number(uasVal) || 0,
+              score_akhir: Number(tr.querySelector(".g-akhir").value) || 0,
+              date: new Date().toISOString().slice(0, 10),
+              created_at: new Date().toISOString()
+          };
+
+          if (id) { payload.__backendId = id; promises.push(window.dataSdk.update(payload)); }
+          else { promises.push(window.dataSdk.create(payload)); }
+      });
+      await Promise.all(promises);
+      showToast(`Nilai Evaluasi ${mapelVal} disimpan`);
+      setPending(btn, false);
+    }
+
+    /* ====================================================================
+       RENDER JURNAL REKAP TUGAS (TU 1 - TU 5)
+       ==================================================================== */
+    function renderRekapTugasJournal() {
+      const host = document.getElementById("table-container");
+      const classVal = document.getElementById("filter-class-rekap")?.value || "X";
+      const mapelVal = document.getElementById("filter-mapel-rekap")?.value || "Bahasa Indonesia";
+      const jurusanVal = document.getElementById("filter-jurusan-rekap")?.value || "";
+
+      const jurusanList = getJurusanList();
+
+      let headerHtml = `
+        <div class="flex gap-4 mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200 shadow-sm flex-wrap">
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Kelas</label><select id="filter-class-rekap" class="field py-1.5 text-sm w-32" onchange="renderRekapTugasJournal()"><option ${classVal==="X"?"selected":""}>X</option><option ${classVal==="XI"?"selected":""}>XI</option><option ${classVal==="XII"?"selected":""}>XII</option></select></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Pilih Jurusan</label><select id="filter-jurusan-rekap" class="field py-1.5 text-sm w-44" onchange="renderRekapTugasJournal()">
+              <option value="">Semua Jurusan</option>
+              ${jurusanList.map(j => `<option value="${j}" ${jurusanVal===j?"selected":""}>${j}</option>`).join('')}
+          </select></div>
+          <div><label class="block text-xs font-bold mb-1.5 text-gray-600">Mata Pelajaran</label><select id="filter-mapel-rekap" class="field py-1.5 text-sm w-48" onchange="renderRekapTugasJournal()">
+              <option ${mapelVal==="Bahasa Indonesia"?"selected":""}>Bahasa Indonesia</option>
+              <option ${mapelVal==="Matematika"?"selected":""}>Matematika</option>
+              <option ${mapelVal==="IPA"?"selected":""}>IPA</option>
+              <option ${mapelVal==="Simdig"?"selected":""}>Simdig</option>
+              <option ${mapelVal==="Penjas"?"selected":""}>Penjas</option>
+          </select></div>
+        </div>
+        <div id="journal-table-wrap"></div>
+      `;
+      host.innerHTML = headerHtml;
+
+      const wrap = document.getElementById("journal-table-wrap");
+      let students = recordsFor("student").filter(s => s.class_name === classVal);
+      if (jurusanVal) {
+        students = students.filter(s => (s.parent_contact || s.jurusan) === jurusanVal);
+      }
+      
+      if (!students.length) {
+        wrap.innerHTML = `<div class="p-10 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-300"><i data-lucide="clipboard-list" class="w-10 h-10 mx-auto mb-2 opacity-50"></i><p>Belum ada siswa terdaftar di kelas ${classVal}${jurusanVal ? ' jurusan ' + jurusanVal : ''}.<br>Gunakan modul Biodata untuk menambah siswa.</p></div>`;
+        lucide.createIcons();
+        return;
+      }
+
+      const tasks = recordsFor("rekap_tugas").filter(t => t.class_name === classVal && t.subject === mapelVal);
+
+      let tableHtml = `<table><thead><tr><th style="width:40px">No</th><th>Nama Siswa</th><th class="text-center" style="width:90px">TU 1</th><th class="text-center" style="width:90px">TU 2</th><th class="text-center" style="width:90px">TU 3</th><th class="text-center" style="width:90px">TU 4</th><th class="text-center" style="width:90px">TU 5</th><th class="text-center bg-gray-200" style="width:100px">Rata-rata</th></tr></thead><tbody>`;
+
+      students.sort((a,b) => a.student_name.localeCompare(b.student_name)).forEach((s, idx) => {
+        const rec = tasks.find(t => t.student_name === s.student_name) || {};
+        const jurText = s.parent_contact || s.jurusan || "";
+        tableHtml += `
+        <tr data-student="${s.student_name}" data-id="${rec.__backendId || ''}">
+            <td class="text-gray-500 font-medium">${idx + 1}</td>
+            <td class="font-bold text-gray-800">${s.student_name} ${jurText ? `<span class="text-xs font-normal text-gray-500 block">${jurText}</span>` : ''}</td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold t-tu1" value="${rec.score_tu1 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold t-tu2" value="${rec.score_tu2 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold t-tu3" value="${rec.score_tu3 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold t-tu4" value="${rec.score_tu4 || ''}" placeholder="0"></td>
+            <td><input type="number" min="0" max="100" class="field py-1.5 w-16 text-center text-sm font-semibold t-tu5" value="${rec.score_tu5 || ''}" placeholder="0"></td>
+            <td class="bg-gray-50"><input type="number" class="field py-1.5 w-full text-center font-extrabold text-[#0f5b46] bg-transparent border-none t-rata" value="${rec.score_rata || 0}" readonly tabindex="-1"></td>
+        </tr>`;
+      });
+
+      tableHtml += `</tbody></table>
+      <div class="p-5 mt-4 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-xl">
+          <button type="button" onclick="saveBulkRekapTugas()" class="rounded-[0.6rem] bg-[#0f5b46] px-6 py-2.5 font-bold text-white hover:bg-[#0a4635] shadow-lg flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Rekap Tugas</button>
+      </div>`;
+
+      wrap.innerHTML = tableHtml;
+      lucide.createIcons();
+
+      wrap.querySelectorAll("input[type='number']:not(.t-rata)").forEach(inp => {
+          inp.addEventListener("input", (e) => {
+              const tr = e.target.closest("tr");
+              const tu1 = Number(tr.querySelector(".t-tu1").value) || 0;
+              const tu2 = Number(tr.querySelector(".t-tu2").value) || 0;
+              const tu3 = Number(tr.querySelector(".t-tu3").value) || 0;
+              const tu4 = Number(tr.querySelector(".t-tu4").value) || 0;
+              const tu5 = Number(tr.querySelector(".t-tu5").value) || 0;
+              let count = 0, sum = 0;
+              if(tr.querySelector(".t-tu1").value !== "") { sum+=tu1; count++; }
+              if(tr.querySelector(".t-tu2").value !== "") { sum+=tu2; count++; }
+              if(tr.querySelector(".t-tu3").value !== "") { sum+=tu3; count++; }
+              if(tr.querySelector(".t-tu4").value !== "") { sum+=tu4; count++; }
+              if(tr.querySelector(".t-tu5").value !== "") { sum+=tu5; count++; }
+              const rata = count === 0 ? 0 : Math.round(sum / count);
+              tr.querySelector(".t-rata").value = rata;
+          });
+      });
+    }
+
+    async function saveBulkRekapTugas() {
+      const classVal = document.getElementById("filter-class-rekap").value;
+      const mapelVal = document.getElementById("filter-mapel-rekap").value;
+      const jurusanVal = document.getElementById("filter-jurusan-rekap")?.value || "";
+      const rows = document.querySelectorAll("#journal-table-wrap tbody tr");
+      const btn = document.querySelector("button[onclick='saveBulkRekapTugas()']");
+      setPending(btn, true);
+
+      const promises = [];
+      rows.forEach((tr) => {
+          const studentName = tr.dataset.student;
+          const id = tr.dataset.id;
+          const tu1Val = tr.querySelector(".t-tu1").value;
+          const tu2Val = tr.querySelector(".t-tu2").value;
+          const tu3Val = tr.querySelector(".t-tu3").value;
+          const tu4Val = tr.querySelector(".t-tu4").value;
+          const tu5Val = tr.querySelector(".t-tu5").value;
+
+          if (!tu1Val && !tu2Val && !tu3Val && !tu4Val && !tu5Val && !id) return; 
+
+          const payload = {
+              record_type: "rekap_tugas",
+              student_name: studentName,
+              class_name: classVal,
+              jurusan: jurusanVal,
+              subject: mapelVal,
+              score_tu1: Number(tu1Val) || 0,
+              score_tu2: Number(tu2Val) || 0,
+              score_tu3: Number(tu3Val) || 0,
+              score_tu4: Number(tu4Val) || 0,
+              score_tu5: Number(tu5Val) || 0,
+              score_rata: Number(tr.querySelector(".t-rata").value) || 0,
+              date: new Date().toISOString().slice(0, 10),
+              created_at: new Date().toISOString()
+          };
+
+          if (id) { payload.__backendId = id; promises.push(window.dataSdk.update(payload)); }
+          else { promises.push(window.dataSdk.create(payload)); }
+      });
+      await Promise.all(promises);
+      showToast(`Rekap Tugas ${mapelVal} disimpan`);
+      setPending(btn, false);
+    }
+    /* ================= END JURNAL MASAL ================= */
+
+
+    function openModal(overrideType = null) {
+      specificFormType = overrideType;
+      currentEditId = null;
+      let fieldsToRender = modules[activeView].fields;
+      if(overrideType === 'student') fieldsToRender = studentFields;
+      document.getElementById("modal-title").innerText = overrideType === 'student' ? "Input Siswa Baru" : "Tambah Data " + modules[activeView].title;
+      buildForm(fieldsToRender);
+      document.getElementById("form-modal").classList.remove("hidden");
+      document.getElementById("form-modal").classList.add("flex");
+    }
+
+    function editData(rowObj) {
+      currentEditId = rowObj.__backendId;
+      specificFormType = null;
+      document.getElementById("modal-title").innerText = "Edit Data " + modules[activeView].title;
+      buildForm(modules[activeView].fields, rowObj);
+      document.getElementById("form-modal").classList.remove("hidden");
+      document.getElementById("form-modal").classList.add("flex");
+    }
+
+    function buildForm(fields, data = {}) {
+      let html = '<form id="active-form" class="space-y-4" onsubmit="event.preventDefault(); saveData();">';
+      fields.forEach(f => {
+        html += `<div><label class="form-label">${f.label} ${f.required?'<span class="text-red-500">*</span>':''}</label>`;
+        if (f.type === "textarea") {
+          html += `<textarea name="${f.name}" class="field h-24" ${f.required?'required':''}>${data[f.name]||''}</textarea>`;
+        } else if (f.type === "select") {
+          html += `<select name="${f.name}" class="field" ${f.required?'required':''}>
+            <option value="">-- Pilih --</option>
+            ${f.options.map(o => `<option value="${o}" ${data[f.name]===o?'selected':''}>${o}</option>`).join('')}
+          </select>`;
+        } else if (f.type === "student_select") {
+           const stds = recordsFor("student");
+           html += `<select name="${f.name}" class="field" ${f.required?'required':''}>
+            <option value="">-- Pilih Siswa --</option>
+            ${stds.map(s => `<option value="${s.student_name}" ${data[f.name]===s.student_name?'selected':''}>${s.student_name} (${s.class_name})</option>`).join('')}
+           </select>`;
+        } else {
+          html += `<input type="${f.type}" name="${f.name}" class="field" value="${data[f.name]||''}" ${f.required?'required':''}>`;
+        }
+        html += `</div>`;
+      });
+      html += '</form>';
+      document.getElementById("form-body").innerHTML = html;
+    }
+
+    function closeModal() {
+      document.getElementById("form-modal").classList.add("hidden");
+      document.getElementById("form-modal").classList.remove("flex");
+    }
+
+    async function saveData() {
+      const form = document.getElementById("active-form");
+      if (!form.checkValidity()) { form.reportValidity(); return; }
+      const btn = document.getElementById("save-btn");
+      setPending(btn, true);
+
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      payload.record_type = specificFormType === 'student' ? modules.biodata.recordType : modules[activeView].recordType;
+      if (!currentEditId) payload.created_at = new Date().toISOString();
+
+      let res;
+      if (currentEditId) {
+        payload.__backendId = currentEditId;
+        res = await window.dataSdk.update(payload);
+      } else {
+        res = await window.dataSdk.create(payload);
+      }
+      setPending(btn, false);
+      if (res.isOk) { showToast("Data tersimpan!"); closeModal(); } 
+      else { alert("Gagal menyimpan data."); }
+    }
+
+    async function deleteData(id) {
+      if(!confirm("Yakin ingin menghapus data ini?")) return;
+      const res = await window.dataSdk.delete({ __backendId: id });
+      if(res.isOk) showToast("Data dihapus!");
+      else alert("Gagal menghapus.");
+    }
+
+    function setPending(btn, isPending) {
+      if(isPending) {
+        btn.dataset.text = btn.innerHTML;
+        btn.innerHTML = `<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Menyimpan...`;
+        btn.disabled = true;
+      } else {
+        btn.innerHTML = btn.dataset.text;
+        btn.disabled = false;
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      document.getElementById("toast-msg").innerText = msg;
+      t.classList.remove("opacity-0", "translate-y-4", "pointer-events-none");
+      setTimeout(() => { t.classList.add("opacity-0", "translate-y-4", "pointer-events-none"); }, 3000);
+    }
+
+    function exportData() {
+      if(allData.length === 0) { alert("Tidak ada data untuk diekspor."); return; }
+      const headers = Array.from(new Set(allData.flatMap(Object.keys))).filter(k => k !== '__backendId');
+      const csvRows = [headers.join(',')];
+      for(const row of allData) {
+        const values = headers.map(h => {
+          const val = row[h] ? String(row[h]).replace(/"/g, '""') : '';
+          return `"${val}"`;
+        });
+        csvRows.push(values.join(','));
+      }
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `backup_jurnal_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
